@@ -110,6 +110,30 @@ struct RadarSettings {
   void fromJson(JsonObjectConst o);
 };
 
+// ---- Weather feature slice ------------------------------------------------
+struct WeatherSettings {
+  String   city;          // city name or "lat,lon" for OWM query
+  String   apiKey;        // OpenWeatherMap API key
+  bool     metric;        // true = °C / m/s ; false = °F / mph
+  uint16_t pollSec;       // refresh period
+  bool     show24h;       // 24-hour time format on weather screen
+
+  // Rotating subtitle toggles (all default true)
+  bool subWind;
+  bool subMinTemp;
+  bool subMaxTemp;
+  bool subFeelsLike;
+  bool subPressure;
+  bool subSunrise;
+  bool subSunset;
+  bool subIp;
+  uint8_t pressureUnit;  // 0=hPa, 1=inHg, 2=mmHg, 3=atm
+
+  void setDefaults();
+  void toJson(JsonObject o) const;
+  void fromJson(JsonObjectConst o);
+};
+
 // ---- Top-level settings ----------------------------------------------------
 struct Settings {
   // --- WiFi station networks (the device joins one of these) ---
@@ -122,11 +146,11 @@ struct Settings {
   String hostname;      // mDNS name => http://<hostname>.local
 
   // --- Active feature ---
-  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL
+  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_CLOCK / MODE_WEATHER
 
   // --- Carousel (mode == MODE_CAROUSEL): dwell + which features rotate ---
   uint16_t carouselSec;
-  bool carouselTicker, carouselUsage, carouselRadar;
+  bool carouselTicker, carouselUsage, carouselRadar, carouselClock, carouselWeather;
 
   // --- Shared HTTP / display ---
   uint16_t httpTimeout; // ms
@@ -140,6 +164,7 @@ struct Settings {
   UsageSettings  usage;
   RadarSettings  radar;
   ClockSettings  clock;
+  WeatherSettings weather;
 
   void setDefaults();
 };

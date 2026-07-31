@@ -28,6 +28,13 @@
 #if WITH_RADAR
 #include "RadarMode.h"
 #endif
+#if WITH_CLOCK
+#include "ClockMode.h"
+#endif
+#if WITH_WEATHER
+#include "WeatherMode.h"
+#include "ForecastMode.h"
+#endif
 
 // ---- mode registry --------------------------------------------------------
 // The compiled-in features, in display order. main.cpp holds no per-feature
@@ -42,6 +49,13 @@ static DisplayMode* kModes[] = {
 #if WITH_RADAR
   &g_radarMode,
 #endif
+#if WITH_CLOCK
+  &g_clockMode,
+#endif
+#if WITH_WEATHER
+  &g_weatherMode,
+  &g_forecastMode,
+#endif
 };
 static const size_t kModeCount = sizeof(kModes) / sizeof(kModes[0]);
 
@@ -53,10 +67,13 @@ static uint32_t g_carSwitch = 0;
 
 static bool carouselHas(const Settings& s, const DisplayMode* m) {
   switch (m->modeConst()) {
-    case MODE_STOCKS: return s.carouselTicker;
-    case MODE_USAGE:  return s.carouselUsage;
-    case MODE_RADAR:  return s.carouselRadar;
-    default:          return true;
+    case MODE_STOCKS:  return s.carouselTicker;
+    case MODE_USAGE:   return s.carouselUsage;
+    case MODE_RADAR:   return s.carouselRadar;
+    case MODE_CLOCK:   return s.carouselClock;
+    case MODE_WEATHER: return s.carouselWeather;
+    case MODE_FORECAST: return s.carouselWeather;  // forecast shares weather carousel toggle
+    default:           return true;
   }
 }
 
@@ -172,12 +189,20 @@ void setup() {
 
   Serial.println("[boot] net");
   netBegin(g_settings, bootProgress);
-  // Arm SNTP now that WiFi (STA) is up — but only if night mode is enabled, so a
-  // ticker-only device doesn't pay the SNTP heap cost (which can starve the cash.ch
-  // TLS handshake on the ESP8266). clockReapply arms it iff needed. Skipped after a
-  // crash so a fault in here can't boot-loop before the web server starts (the
-  // device then comes up in safe mode, OTA-recoverable, instead of needing UART).
-  if (!g_safeMode) clockReapply(g_settings);
+  // Arm SNTP now that WiFi (STA) is up — but only if night mode is enabled, or
+  // the clock/weather modes need time. clockReapply arms it iff needed. Skipped
+  // after a crash so a fault in here can't boot-loop before the web server starts.
+  if (!g_safeMode) {
+    // Clock and Weather modes always need NTP; night mode does too.
+    if (g_settings.clock.nightEnabled ||
+        g_settings.mode == MODE_CLOCK || g_settings.mode == MODE_WEATHER ||
+        g_settings.mode == MODE_FORECAST ||
+        g_settings.carouselClock || g_settings.carouselWeather) {
+      clockBegin(g_settings);
+    } else {
+      clockReapply(g_settings);
+    }
+  }
 
   // A GitHub update queued from the web UI runs now, before the features claim
   // the heap (the download needs a 16 KB TLS buffer that only fits at boot).
@@ -194,7 +219,9 @@ void setup() {
   webPortalBegin(g_settings);
 
   Serial.println("[boot] modes");
-  for (size_t i = 0; i < kModeCount; i++) kModes[i]->begin(g_settings);
+  if (!g_safeMode) {
+    for (size_t i = 0; i < kModeCount; i++) kModes[i]->begin(g_settings);
+  }
   Serial.println("[boot] done");
 
   if (netMode() == NET_AP) {

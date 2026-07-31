@@ -63,6 +63,8 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
  <button data-t="ticker">Ticker</button>
  <button data-t="usage">Usage</button>
  <button data-t="radar">Radar</button>
+ <button data-t="clocktab">Clock</button>
+ <button data-t="weathertab">Weather</button>
  <button data-t="update">Update</button>
 </nav>
 <main>
@@ -103,6 +105,9 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
     <option value="stocks">Stock / crypto ticker</option>
     <option value="usage">Claude usage</option>
     <option value="radar">Plane radar</option>
+    <option value="clock">Clock</option>
+    <option value="weather">Weather</option>
+    <option value="forecast">Forecast</option>
     <option value="carousel">Carousel (rotate modes)</option>
    </select>
    <div id="carouselRow">
@@ -110,6 +115,8 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
     <div class="chk"><input id="carouselTicker" type="checkbox"><label>Ticker</label></div>
     <div class="chk"><input id="carouselUsage" type="checkbox"><label>Claude usage</label></div>
     <div class="chk"><input id="carouselRadar" type="checkbox"><label>Plane radar</label></div>
+    <div class="chk"><input id="carouselClock" type="checkbox"><label>Clock</label></div>
+    <div class="chk"><input id="carouselWeather" type="checkbox"><label>Weather</label></div>
    </div>
    <small class="hint">Pick the active feature, then configure it in its own tab. Carousel rotates through the ticked features.</small>
   </div>
@@ -250,6 +257,42 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
   </div>
  </section>
 
+ <!-- CLOCK (feature) -->
+ <section id="clocktab" class="tab">
+  <div class="card"><h2>Clock display</h2>
+   <small class="hint">The clock face shows local time from NTP. Configure the timezone in the Display tab (Night mode section). The 12/24h format is shared with the Weather tab.</small>
+   <div class="chk"><input id="weatherShow24h" type="checkbox"><label>Use 24-hour format</label></div>
+  </div>
+ </section>
+
+ <!-- WEATHER (feature) -->
+ <section id="weathertab" class="tab">
+  <div class="card"><h2>OpenWeatherMap</h2>
+   <label>City name (or lat,lon)</label><input id="weatherCity" type="text" placeholder="London">
+   <label>API key</label><input id="weatherApiKey" type="text" placeholder="your-owm-api-key">
+   <small class="hint">Free key from <a href="https://openweathermap.org/appid" target="_blank">openweathermap.org</a>. The free tier allows 60 calls/min.</small>
+   <div class="chk"><input id="weatherMetric" type="checkbox"><label>Metric units (°C, m/s)</label></div>
+   <label>Poll interval (seconds)</label><input id="weatherPollSec" type="number" min="60" max="3600">
+  </div>
+  <div class="card"><h2>Rotating Subtitle</h2>
+   <small class="hint">Choose which info rotates below the city name on the weather clock.</small>
+   <div class="chk"><input id="subWind" type="checkbox"><label>Wind speed</label></div>
+   <div class="chk"><input id="subMinTemp" type="checkbox"><label>Min temperature</label></div>
+   <div class="chk"><input id="subMaxTemp" type="checkbox"><label>Max temperature</label></div>
+   <div class="chk"><input id="subFeelsLike" type="checkbox"><label>Feels like</label></div>
+   <div class="chk"><input id="subPressure" type="checkbox"><label>Atmospheric pressure</label></div>
+   <div style="margin-left:24px"><label>Unit</label><select id="pressureUnit">
+    <option value="0">hPa (hectopascal)</option>
+    <option value="1">inHg (inches mercury)</option>
+    <option value="2">mmHg (millimeters mercury)</option>
+    <option value="3">atm (atmosphere)</option>
+   </select></div>
+   <div class="chk"><input id="subSunrise" type="checkbox"><label>Sunrise</label></div>
+   <div class="chk"><input id="subSunset" type="checkbox"><label>Sunset</label></div>
+   <div class="chk"><input id="subIp" type="checkbox"><label>IP address</label></div>
+  </div>
+ </section>
+
  <!-- UPDATE -->
  <section id="update" class="tab">
   <div class="card"><h2>Update from GitHub</h2>
@@ -342,8 +385,8 @@ var TZMAP={
 function fillTz(){var s=$('tz');if(!s)return;var keys=Object.keys(TZMAP).filter(function(k){return k!==''});
  keys.sort();s.innerHTML='<option value="">UTC</option>'+keys.map(function(k){return '<option value="'+k+'">'+k+'</option>'}).join('');}
 
-var MODEOPT={ticker:'stocks',usage:'usage',radar:'radar'};
-var CAROPT={ticker:'carouselTicker',usage:'carouselUsage',radar:'carouselRadar'};
+var MODEOPT={ticker:'stocks',usage:'usage',radar:'radar',clocktab:'clock',weathertab:'weather'};
+var CAROPT={ticker:'carouselTicker',usage:'carouselUsage',radar:'carouselRadar',clocktab:'carouselClock',weathertab:'carouselWeather'};
 function hideFeat(name){
  var b=document.querySelector('nav button[data-t="'+name+'"]'); if(b)b.remove();
  var sec=$(name); if(sec)sec.remove();
@@ -353,7 +396,7 @@ function hideFeat(name){
 function modeChanged(){if(!$('mode'))return;
  $('carouselRow').style.display=$('mode').value==='carousel'?'block':'none';}
 function loadConfig(){return j('/api/config').then(function(c){C=c;
- var f=c.features||{}; ['ticker','usage','radar'].forEach(function(k){if(f[k]===false)hideFeat(k)});
+ var f=c.features||{}; ['ticker','usage','radar','clocktab','weathertab'].forEach(function(k){if(f[k.replace('tab','')]===false)hideFeat(k)});
  var t=c.ticker||{}, u=c.usage||{};
  // shared
  ['apSsid','apPass','hostname'].forEach(function(k){$(k).value=c[k]!=null?c[k]:''});
@@ -374,6 +417,7 @@ function loadConfig(){return j('/api/config').then(function(c){C=c;
  $('mode').value=c.mode||'stocks'; modeChanged();
  sv('carouselSec',c.carouselSec||30);
  sc('carouselTicker',c.carouselTicker!==false); sc('carouselUsage',c.carouselUsage!==false); sc('carouselRadar',c.carouselRadar!==false);
+ sc('carouselClock',c.carouselClock!==false); sc('carouselWeather',c.carouselWeather!==false);
  // ticker slice
  T_TEXT.forEach(function(k){sv(k,t[k])});
  T_NUM.forEach(function(k){sv(k,t[k])});
@@ -396,6 +440,16 @@ function loadConfig(){return j('/api/config').then(function(c){C=c;
  sv('radarUiScale',r.uiScale!=null?r.uiScale:1);
  sv('radarMinAlt',r.minAltFt!=null?r.minAltFt:0);
  renderAps(r.airports||[]);
+ // weather slice
+ var w=c.weather||{};
+ sv('weatherCity',w.city); sv('weatherApiKey',w.apiKey);
+ sc('weatherMetric',w.metric!==false); sv('weatherPollSec',w.pollSec||600);
+ sc('weatherShow24h',w.show24h!==false);
+ sc('subWind',w.subWind!==false); sc('subMinTemp',w.subMinTemp!==false);
+ sc('subMaxTemp',w.subMaxTemp!==false); sc('subFeelsLike',w.subFeelsLike!==false);
+ sc('subPressure',w.subPressure!==false); sc('subSunrise',w.subSunrise!==false);
+ sc('subSunset',w.subSunset!==false); sc('subIp',!!w.subIp);
+ if($('pressureUnit'))$('pressureUnit').value=w.pressureUnit||0;
  var ap=$('apPass'); if(ap)ap.placeholder=c.apPassSet?'(unchanged)':'(open)';
 })}
 
@@ -447,6 +501,7 @@ function collect(){
  var o={mode:gv('mode'),
   carouselSec:parseInt(gv('carouselSec'))||30,
   carouselTicker:gc('carouselTicker'), carouselUsage:gc('carouselUsage'), carouselRadar:gc('carouselRadar'),
+  carouselClock:gc('carouselClock'), carouselWeather:gc('carouselWeather'),
   brightness:parseInt(gv('brightness'))||0,
   rotation:parseInt(gv('rotation')),
   autoBrightness:gc('autoBrightness'),
@@ -488,6 +543,17 @@ function collect(){
    if(ic)r.airports.push({icao:ic,lat:parseFloat(tr.querySelector('.ala').value)||0,lon:parseFloat(tr.querySelector('.alo').value)||0});
   });
   o.radar=r;
+ }
+ // weather slice
+ if($('weathertab')){
+  o.weather={city:gv('weatherCity'), apiKey:gv('weatherApiKey'),
+   metric:gc('weatherMetric'), pollSec:parseInt(gv('weatherPollSec'))||600,
+   show24h:gc('weatherShow24h'),
+   subWind:gc('subWind'), subMinTemp:gc('subMinTemp'),
+   subMaxTemp:gc('subMaxTemp'), subFeelsLike:gc('subFeelsLike'),
+   subPressure:gc('subPressure'), subSunrise:gc('subSunrise'),
+   subSunset:gc('subSunset'), subIp:gc('subIp'),
+   pressureUnit:parseInt($('pressureUnit').value)||0};
  }
  return o;
 }

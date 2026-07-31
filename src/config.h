@@ -66,6 +66,9 @@
 #define MODE_USAGE     1
 #define MODE_RADAR     2
 #define MODE_CAROUSEL  3
+#define MODE_CLOCK     4
+#define MODE_WEATHER   5
+#define MODE_FORECAST  6
 #define DEFAULT_MODE MODE_STOCKS
 #define DEFAULT_CAROUSEL_SEC 30      // per-mode dwell in carousel
 
@@ -83,6 +86,12 @@
 #endif
 #ifndef WITH_RADAR
 #define WITH_RADAR 1
+#endif
+#ifndef WITH_CLOCK
+#define WITH_CLOCK 1
+#endif
+#ifndef WITH_WEATHER
+#define WITH_WEATHER 1
 #endif
 
 // Claude usage mode: once data stops arriving for this long (PC asleep, daemon
@@ -199,3 +208,17 @@
 // (morning). Once night mode has switched on, it stays on until the window ends.
 #define NIGHT_NTP_TRUST_MS      300000UL  // 5 min: max age of the sync that unlocks night
 #define NIGHT_NTP_RESYNC_MS      30000UL  // re-sync attempt cadence while held off
+
+// ---------------------------------------------------------------------------
+// Weather (MODE_WEATHER)
+//   OpenWeatherMap API — free tier allows 60 calls/min (current + 5-day forecast).
+//   The device fetches current conditions + 3-day forecast on a timed cadence.
+// ---------------------------------------------------------------------------
+#define OWM_HOST            "api.openweathermap.org"
+#define OWM_CURRENT_PATH    "/data/2.5/weather"
+#define OWM_FORECAST_PATH   "/data/2.5/forecast"
+#define OWM_USER_AGENT      "Mozilla/5.0 (SmallTV)"
+#define DEFAULT_WEATHER_POLL_SEC 600       // 10 min between refreshes
+#define MAX_CITY_LEN        40
+#define MAX_OWM_KEY_LEN     40
+#define WEATHER_FORECAST_DAYS 3
