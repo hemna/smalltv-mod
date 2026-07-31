@@ -260,6 +260,67 @@ void RadarSettings::fromJson(JsonObjectConst o) {
 }
 
 // ===========================================================================
+// Weather slice
+// ===========================================================================
+void WeatherSettings::setDefaults() {
+  city = "";
+  apiKey = "";
+  metric = true;
+  pollSec = DEFAULT_WEATHER_POLL_SEC;
+  show24h = true;
+  subWind = true;
+  subMinTemp = true;
+  subMaxTemp = true;
+  subFeelsLike = true;
+  subPressure = true;
+  subSunrise = true;
+  subSunset = true;
+  subIp = false;
+  pressureUnit = 0;  // hPa default
+}
+
+void WeatherSettings::toJson(JsonObject o) const {
+  o["city"]    = city;
+  // Mask API key for web UI — show only presence indicator
+  o["apiKey"]  = apiKey.length() > 0 ? "••••••••" : "";
+  o["apiKeySet"] = apiKey.length() > 0;
+  o["metric"]  = metric;
+  o["pollSec"] = pollSec;
+  o["show24h"] = show24h;
+  o["subWind"] = subWind;
+  o["subMinTemp"] = subMinTemp;
+  o["subMaxTemp"] = subMaxTemp;
+  o["subFeelsLike"] = subFeelsLike;
+  o["subPressure"] = subPressure;
+  o["subSunrise"] = subSunrise;
+  o["subSunset"] = subSunset;
+  o["subIp"] = subIp;
+  o["pressureUnit"] = pressureUnit;
+}
+
+void WeatherSettings::fromJson(JsonObjectConst o) {
+  if (o["city"].is<const char*>())   city = o["city"].as<String>();
+  if (o["apiKey"].is<const char*>()) {
+    String newKey = o["apiKey"].as<String>();
+    // Preserve stored key if UI sends masked placeholder
+    if (newKey.length() > 0 && newKey != "\xe2\x80\xa2\xe2\x80\xa2\xe2\x80\xa2\xe2\x80\xa2\xe2\x80\xa2\xe2\x80\xa2\xe2\x80\xa2\xe2\x80\xa2")
+      apiKey = newKey;
+  }
+  if (o["metric"].is<bool>())        metric = o["metric"];
+  if (o["pollSec"].is<int>())        pollSec = constrain((int)o["pollSec"], 60, 3600);
+  if (o["show24h"].is<bool>())       show24h = o["show24h"];
+  if (o["subWind"].is<bool>())       subWind = o["subWind"];
+  if (o["subMinTemp"].is<bool>())    subMinTemp = o["subMinTemp"];
+  if (o["subMaxTemp"].is<bool>())    subMaxTemp = o["subMaxTemp"];
+  if (o["subFeelsLike"].is<bool>())  subFeelsLike = o["subFeelsLike"];
+  if (o["subPressure"].is<bool>())   subPressure = o["subPressure"];
+  if (o["subSunrise"].is<bool>())    subSunrise = o["subSunrise"];
+  if (o["subSunset"].is<bool>())     subSunset = o["subSunset"];
+  if (o["subIp"].is<bool>())         subIp = o["subIp"];
+  if (o["pressureUnit"].is<int>())   pressureUnit = min(3, (int)o["pressureUnit"]);
+}
+
+// ===========================================================================
 // Top-level settings
 // ===========================================================================
 void Settings::setDefaults() {
@@ -276,7 +337,7 @@ void Settings::setDefaults() {
 
   mode = DEFAULT_MODE;
   carouselSec = DEFAULT_CAROUSEL_SEC;
-  carouselTicker = carouselUsage = carouselRadar = true;
+  carouselTicker = carouselUsage = carouselRadar = carouselClock = carouselWeather = true;
   httpTimeout = DEFAULT_HTTP_TIMEOUT;
 
   brightness = DEFAULT_BRIGHTNESS;
@@ -288,6 +349,7 @@ void Settings::setDefaults() {
   usage.setDefaults();
   radar.setDefaults();
   clock.setDefaults();
+  weather.setDefaults();
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +363,11 @@ bool settingsBegin() {
 bool loadSettings(Settings& s) {
   s.setDefaults();
   File f = LittleFS.open(CONFIG_PATH, "r");
-  if (!f) return false;
+  if (!f) {
+    // If main config is gone, try recovery from temp file
+    f = LittleFS.open("/config.tmp", "r");
+    if (!f) return false;
+  }
 
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, f);
@@ -317,11 +383,18 @@ bool saveSettings(const Settings& s) {
   JsonObject root = doc.to<JsonObject>();
   settingsToJson(s, root, /*includeSecrets=*/true);
 
-  File f = LittleFS.open(CONFIG_PATH, "w");
+  // Write to a temp file first, then rename — prevents corruption if the
+  // device reboots or runs out of heap mid-write.
+  static const char* TMP_PATH = "/config.tmp";
+  File f = LittleFS.open(TMP_PATH, "w");
   if (!f) return false;
   bool ok = serializeJson(doc, f) > 0;
   f.close();
-  return ok;
+  if (!ok) { LittleFS.remove(TMP_PATH); return false; }
+
+  // Atomic-ish swap: remove old, rename new.
+  LittleFS.remove(CONFIG_PATH);
+  return LittleFS.rename(TMP_PATH, CONFIG_PATH);
 }
 
 void factoryReset(Settings& s) {
@@ -355,11 +428,16 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   // Mode + shared HTTP/display
   root["mode"]              = (s.mode == MODE_RADAR)    ? "radar"
                             : (s.mode == MODE_USAGE)    ? "usage"
-                            : (s.mode == MODE_CAROUSEL) ? "carousel" : "stocks";
+                            : (s.mode == MODE_CAROUSEL) ? "carousel"
+                            : (s.mode == MODE_CLOCK)    ? "clock"
+                            : (s.mode == MODE_WEATHER)  ? "weather"
+                            : (s.mode == MODE_FORECAST) ? "forecast" : "stocks";
   root["carouselSec"]       = s.carouselSec;
   root["carouselTicker"]    = s.carouselTicker;
   root["carouselUsage"]     = s.carouselUsage;
   root["carouselRadar"]     = s.carouselRadar;
+  root["carouselClock"]     = s.carouselClock;
+  root["carouselWeather"]   = s.carouselWeather;
   root["httpTimeout"]       = s.httpTimeout;
   root["brightness"]        = s.brightness;
   root["autoBrightness"]    = s.autoBrightness;
@@ -371,6 +449,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   s.usage.toJson(root["usage"].to<JsonObject>());
   s.radar.toJson(root["radar"].to<JsonObject>());
   s.clock.toJson(root["clock"].to<JsonObject>());
+  s.weather.toJson(root["weather"].to<JsonObject>());
 }
 
 // Apply only the keys that are present (partial update friendly). Accepts both
@@ -421,12 +500,17 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
     String m = root["mode"].as<String>();
     s.mode = m.equalsIgnoreCase("radar")    ? MODE_RADAR
            : m.equalsIgnoreCase("usage")    ? MODE_USAGE
-           : m.equalsIgnoreCase("carousel") ? MODE_CAROUSEL : MODE_STOCKS;
+           : m.equalsIgnoreCase("carousel") ? MODE_CAROUSEL
+           : m.equalsIgnoreCase("clock")    ? MODE_CLOCK
+           : m.equalsIgnoreCase("weather")  ? MODE_WEATHER
+           : m.equalsIgnoreCase("forecast") ? MODE_FORECAST : MODE_STOCKS;
   }
   if (root["carouselSec"].is<int>())      s.carouselSec = constrain((int)root["carouselSec"], 5, 3600);
   if (root["carouselTicker"].is<bool>())  s.carouselTicker = root["carouselTicker"];
   if (root["carouselUsage"].is<bool>())   s.carouselUsage = root["carouselUsage"];
   if (root["carouselRadar"].is<bool>())   s.carouselRadar = root["carouselRadar"];
+  if (root["carouselClock"].is<bool>())   s.carouselClock = root["carouselClock"];
+  if (root["carouselWeather"].is<bool>()) s.carouselWeather = root["carouselWeather"];
 
   if (root["httpTimeout"].is<int>())        s.httpTimeout = constrain((int)root["httpTimeout"], 1000, 20000);
   if (root["brightness"].is<int>())         s.brightness = constrain((int)root["brightness"], 0, 100);
@@ -444,4 +528,5 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
   // Radar has no legacy flat layout; only apply when its nested object is present.
   if (root["radar"].is<JsonObjectConst>()) s.radar.fromJson(root["radar"].as<JsonObjectConst>());
   if (root["clock"].is<JsonObjectConst>()) s.clock.fromJson(root["clock"].as<JsonObjectConst>());
+  if (root["weather"].is<JsonObjectConst>()) s.weather.fromJson(root["weather"].as<JsonObjectConst>());
 }
